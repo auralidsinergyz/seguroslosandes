@@ -9,10 +9,18 @@ class wfBrowscap {
 	const COMPRESSION_PATTERN_START = '@';
 	const COMPRESSION_PATTERN_DELIMITER = '|';
 	const REGEX_DELIMITER = '@';
+	
+	public static function shared() {
+		static $_browscap = null;
+		if ($_browscap === null) {
+			$_browscap = new wfBrowscap();
+		}
+		return $_browscap;
+	}
 
     public function getBrowser($user_agent){
         if (!$this->_cacheLoaded) {
-                if (!$this->_loadCache('wfBrowscapCache.php')) {
+                if (!$this->_loadCache(dirname(__FILE__) . '/wfBrowscapCache.php')) {
                     throw new Exception('Cannot load this cache version - the cache format is not compatible.');
                 }
             }
@@ -76,7 +84,6 @@ class wfBrowscap {
     }
     protected function _loadCache($cache_file){
         $cache_version  = null;
-        $source_version = null;
         $browsers       = array();
         $userAgents     = array();
         $patterns       = array();
@@ -86,7 +93,6 @@ class wfBrowscap {
 
         require $cache_file;
 
-        $this->_source_version = $source_version;
         $this->_browsers       = $browsers;
         $this->_userAgents     = $userAgents;
         $this->_patterns       = $patterns;

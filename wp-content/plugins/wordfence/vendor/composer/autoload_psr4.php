@@ -6,4 +6,5 @@ $vendorDir = dirname(dirname(__FILE__));
 $baseDir = dirname($vendorDir);
 
 return array(
+    'Wordfence\\MmdbReader\\' => array($vendorDir . '/wordfence/mmdb-reader/src'),
 );

@@ -1,4 +1,5 @@
 <?php
+if (defined('WFWAF_VERSION') && !defined('WFWAF_RUN_COMPLETE')) {
 
 interface wfWAFRequestInterface {
 
@@ -7,6 +8,8 @@ interface wfWAFRequestInterface {
 	public function getRawBody();
 	
 	public function getMd5Body();
+
+	public function getJsonBody();
 
 	public function getQueryString();
 	
@@ -43,6 +46,122 @@ interface wfWAFRequestInterface {
 
 }
 
+abstract class wfCookieRedactor {
+
+	const REDACTION_MESSAGE = '[redacted]';
+
+	public abstract function redact(&$name, &$value);
+
+	public static function load() {
+		$patterns = null;
+		$waf = wfWAF::getInstance();
+		if ($waf !== null) {
+			$patterns = $waf->getCookieRedactionPatterns();
+		}
+		if ($patterns === null) {
+			return new wfGlobalCookieRedactor();
+		}
+		else {
+			return new wfPatternCookieRedactor($waf->getCookieRedactionPatterns());
+		}
+	}
+
+	public static function loadFromWaf() {
+		return new self($patterns);
+	}
+
+	public static function getEncodedRedactionMessage() {
+		static $encoded = null;
+		if ($encoded === null)
+			$encoded = urlencode(self::REDACTION_MESSAGE);
+		return $encoded;
+	}
+
+}
+
+class wfGlobalCookieRedactor extends wfCookieRedactor {
+
+	public function redact(&$name, &$value) {
+		$name = self::getEncodedRedactionMessage();
+		$value = self::REDACTION_MESSAGE;
+	}
+
+}
+
+class wfPatternCookieRedactor extends wfCookieRedactor {
+
+	private $patterns;
+
+	public function __construct($patterns) {
+		$this->patterns = $patterns;
+	}
+
+	private static function replaceName($matches) {
+		if (count($matches) < 2)
+			return self::getEncodedRedactionMessage();
+		$name = $matches[0][0];
+		$redacted = array();
+		$position = 0;
+		for ($i = 1; $i < count($matches); $i++) {
+			$retained = $matches[$i][0];
+			$retainedStart = $matches[$i][1];
+			$retainedLength = strlen($retained);
+			if ($retainedStart > $position)
+				$redacted[] = self::getEncodedRedactionMessage();
+			$redacted[] = $retained;
+			$position = $retainedStart + $retainedLength;
+		}
+		if ($position < strlen($name))
+			$redacted []= self::getEncodedRedactionMessage();
+		return implode('', $redacted);
+	}
+
+	/**
+	 * TODO: Remove this fallback support for PHP versions earlier than 7.4 is no longer required
+	 */
+	private static function replaceNameFallback($matches) {
+		$completeMatch = array_shift($matches);
+		$completeRetained = implode('', $matches);
+		if ($completeMatch === $completeRetained)
+			return $completeRetained;
+		$matches[] = '';
+		return implode(self::getEncodedRedactionMessage(), $matches);
+	}
+
+	public function redact(&$name, &$value) {
+		$pregOffsetCaptureSupported = version_compare(PHP_VERSION, '7.4.0', '>=');
+		$nameCallback = array($this, $pregOffsetCaptureSupported ? 'replaceName' : 'replaceNameFallback');
+		foreach ($this->patterns as $namePattern => $valuePatterns) {
+			if ($pregOffsetCaptureSupported) {
+				$nameRedacted = preg_replace_callback($namePattern, $nameCallback, $name, 1, $matchCount, PREG_OFFSET_CAPTURE);
+			}
+			else {
+				$nameRedacted = preg_replace_callback($namePattern, $nameCallback, $name, 1, $matchCount);
+			}
+			if ($matchCount === 1 && $nameRedacted !== null) {
+				$name = $nameRedacted;
+				if ($valuePatterns === null)
+					return;
+				if (is_string($valuePatterns))
+					$valuePatterns = array($valuePatterns);
+				if (is_array($valuePatterns)) {
+					$valueMatched = false;
+					foreach ($valuePatterns as $valuePattern) {
+						if (preg_match($valuePattern, $value) === 1) {
+							$valueMatched = true;
+							break;
+						}
+					}
+					if (!$valueMatched)
+						return;
+				}
+				$value = self::REDACTION_MESSAGE;
+				break;
+			}
+		}
+	}
+
+}
 
 class wfWAFRequest implements wfWAFRequestInterface {
 
@@ -229,6 +348,40 @@ class wfWAFRequest implements wfWAFRequestInterface {
 		return $request;
 	}
 
+	private static function extractFileProperty($key, $property) {
+		$extracted = array();
+		if (is_array($property)) {
+			foreach ($property as $nestedKey => $value) {
+				$nestedKey = "{$key}[" . var_export($nestedKey, true) . ']';
+				foreach (self::extractFileProperty($nestedKey, $value) as $nested) {
+					$extracted[] = $nested;
+				}
+			}
+		}
+		else if (is_string($property) || is_int($property)) {
+			$extracted[] = array(
+				$key,
+				$property
+			);
+		}
+		return $extracted;
+	}
+
+	private static function flattenFiles($files) {
+		$flat = array();
+		foreach ($files as $baseKey => $file) {
+			foreach ($file as $property => $value) {
+				foreach (self::extractFileProperty($baseKey, $value) as $extracted) {
+					list($finalKey, $finalValue) = $extracted;
+					if (!array_key_exists($finalKey, $flat))
+						$flat[$finalKey] = array();
+					$flat[$finalKey][$property] = $finalValue;
+				}
+			}
+		}
+		return $flat;
+	}
+
 	/**
 	 * @param wfWAFRequest|null $request
 	 * @return wfWAFRequest
@@ -262,12 +415,13 @@ class wfWAFRequest implements wfWAFRequestInterface {
 			$request->setRawBody('');
 		}
 		else {
-			$request->setRawBody(wfWAFUtils::rawPOSTBody());
+			$rawBody=wfWAFUtils::rawPOSTBody();
+			$request->setRawBody($rawBody);
 		}
 		
 		$request->setQueryString(wfWAFUtils::stripMagicQuotes($_GET));
 		$request->setCookies(wfWAFUtils::stripMagicQuotes($_COOKIE));
-		$request->setFiles(wfWAFUtils::stripMagicQuotes($_FILES));
+		$request->setFiles(wfWAFUtils::stripMagicQuotes(self::flattenFiles($_FILES)));
 
 		if (!empty($_FILES)) {
 			$fileNames = array();
@@ -342,6 +496,8 @@ class wfWAFRequest implements wfWAFRequestInterface {
 	private $body;
 	private $rawBody;
 	private $md5Body;
+	private $jsonBody;
+	private $jsonParsed = false;
 	private $cookies;
 	private $fileNames;
 	private $files;
@@ -401,6 +557,18 @@ class wfWAFRequest implements wfWAFRequestInterface {
 		return $this->md5Body;
 	}
 
+	public function getJsonBody() {
+		if ($this->jsonParsed === false) {
+			if (defined('WFWAF_DISABLE_RAW_BODY') && WFWAF_DISABLE_RAW_BODY) {
+				$this->setJsonBody(null);
+			}
+			else {
+				$this->setJsonBody(wfWAFUtils::json_decode($this->getRawBody(), true));
+			}
+		}
+		return $this->jsonBody;
+	}
+
 	public function getQueryString() {
 		if (func_num_args() > 0) {
 			$args = func_get_args();
@@ -443,12 +611,14 @@ class wfWAFRequest implements wfWAFRequestInterface {
 	 * @param string|null $baseKey The base key used when recursing.
 	 * @return string
 	 */
-	public function getCookieString($cookies = null, $baseKey = null, $preventRedaction = false) {
+	public function getCookieString($cookies = null, $baseKey = null, $preventRedaction = false, $redactor = null) {
 		if ($cookies == null) {
 			$cookies = $this->getCookies();
 		}
 		$isAssoc = (array_keys($cookies) !== range(0, count($cookies) - 1));
 		$cookieString = '';
+		if ($redactor === null)
+			$redactor = wfCookieRedactor::load();
 		foreach ($cookies as $cookieName => $cookieValue) {
 			$resolvedName = $cookieName;
 			if ($baseKey !== null) {
@@ -465,9 +635,8 @@ class wfWAFRequest implements wfWAFRequestInterface {
 				$cookieString .= $nestedCookies;
 			}
 			else {
-				if (strpos($resolvedName, 'wordpress_') === 0 && !$preventRedaction) {
-					$cookieValue = '<redacted>';
-				}
+				if (!$preventRedaction)
+					$redactor->redact($resolvedName, $cookieValue);
 				
 				$cookieString .= $resolvedName . '=' . urlencode($cookieValue) . '; ';
 			}
@@ -591,7 +760,7 @@ class wfWAFRequest implements wfWAFRequestInterface {
 		}
 		$queryString = $this->getQueryString();
 		if ($queryString) {
-			$uri .= '?' . http_build_query($queryString, null, '&');
+			$uri .= '?' . http_build_query($queryString, '', '&');
 		}
 		if (!empty($highlights['queryString'])) {
 			foreach ($highlights['queryString'] as $matches) {
@@ -632,7 +801,7 @@ class wfWAFRequest implements wfWAFRequestInterface {
 					case 'authorization':
 						$hasAuth = true;
 						if ($auth) {
-							$request .= 'Authorization: Basic ' . ($preventRedaction ? base64_encode($auth['user'] . ':' . $auth['password']) : '<redacted>') . "\n";
+							$request .= 'Authorization: Basic ' . ($preventRedaction ? base64_encode($auth['user'] . ':' . $auth['password']) : '[redacted]') . "\n";
 						}
 						break;
 
@@ -644,18 +813,139 @@ class wfWAFRequest implements wfWAFRequestInterface {
 		}
 
 		if (!$hasAuth && $auth) {
-			$request .= 'Authorization: Basic ' . ($preventRedaction ? base64_encode($auth['user'] . ':' . $auth['password']) : '<redacted>') . "\n";
+			$request .= 'Authorization: Basic ' . ($preventRedaction ? base64_encode($auth['user'] . ':' . $auth['password']) : '[redacted]') . "\n";
 		}
+		
+		$bareRequestURI = wfWAFUtils::extractBareURI($this->getURI());
+		$isAuthRequest = (strpos($bareRequestURI, '/wp-login.php') !== false);
+		$isXMLRPC = (strpos($bareRequestURI, '/xmlrpc.php') !== false);
+		$xmlrpcFieldMap = array(
+			'wp.getUsersBlogs' => array(0, 1),
+			'wp.newPost' => array(1, 2),
+			'wp.editPost' => array(1, 2),
+			'wp.deletePost' => array(1, 2),
+			'wp.getPost' => array(1, 2),
+			'wp.getPosts' => array(1, 2),
+			'wp.newTerm' => array(1, 2),
+			'wp.editTerm' => array(1, 2),
+			'wp.deleteTerm' => array(1, 2),
+			'wp.getTerm' => array(1, 2),
+			'wp.getTerms' => array(1, 2),
+			'wp.getTaxonomy' => array(1, 2),
+			'wp.getTaxonomies' => array(1, 2),
+			'wp.getUser' => array(1, 2),
+			'wp.getUsers' => array(1, 2),
+			'wp.getProfile' => array(1, 2),
+			'wp.editProfile' => array(1, 2),
+			'wp.getPage' => array(2, 3),
+			'wp.getPages' => array(1, 2),
+			'wp.newPage' => array(1, 2),
+			'wp.deletePage' => array(1, 2),
+			'wp.editPage' => array(2, 3),
+			'wp.getPageList' => array(1, 2),
+			'wp.getAuthors' => array(1, 2),
+			'wp.getTags' => array(1, 2),
+			'wp.newCategory' => array(1, 2),
+			'wp.deleteCategory' => array(1, 2),
+			'wp.suggestCategories' => array(1, 2),
+			'wp.getComment' => array(1, 2),
+			'wp.getComments' => array(1, 2),
+			'wp.deleteComment' => array(1, 2),
+			'wp.editComment' => array(1, 2),
+			'wp.newComment' => array(1, 2),
+			'wp.getCommentStatusList' => array(1, 2),
+			'wp.getCommentCount' => array(1, 2),
+			'wp.getPostStatusList' => array(1, 2),
+			'wp.getPageStatusList' => array(1, 2),
+			'wp.getPageTemplates' => array(1, 2),
+			'wp.getMediaItem' => array(1, 2),
+			'wp.getMediaLibrary' => array(1, 2),
+			'wp.getPostFormats' => array(1, 2),
+			'wp.getPostType' => array(1, 2),
+			'wp.getPostTypes' => array(1, 2),
+			'wp.getRevisions' => array(1, 2),
+			'wp.restoreRevision' => array(1, 2),
+			'blogger.getUsersBlogs' => array(1, 2),
+			'blogger.getUserInfo' => array(1, 2),
+			'blogger.getPost' => array(2, 3),
+			'blogger.getRecentPosts' => array(2, 3),
+			'blogger.newPost' => array(2, 3),
+			'blogger.editPost' => array(2, 3),
+			'blogger.deletePost' => array(2, 3),
+			'metaWeblog.newPost' => array(1, 2),
+			'metaWeblog.editPost' => array(1, 2),
+			'metaWeblog.getPost' => array(1, 2),
+			'metaWeblog.getRecentPosts' => array(1, 2),
+			'metaWeblog.getCategories' => array(1, 2),
+			'metaWeblog.newMediaObject' => array(1, 2),
+			'mt.getRecentPostTitles' => array(1, 2),
+			'mt.getCategoryList' => array(1, 2),
+			'mt.getPostCategories' => array(1, 2),
+			'mt.setPostCategories' => array(1, 2),
+			'mt.publishPost' => array(1, 2),
+		);
 
 		$body = $this->getBody();
+		$rawBody = $this->getRawBody();
 		$contentType = $this->getHeaders('Content-Type');
-		if (is_array($body)) {
-			if (preg_match('/^multipart\/form\-data;(?:\s*(?!boundary)(?:[^\x00-\x20\(\)<>@,;:\\"\/\[\]\?\.=]+)=[^;]+;)*\s*boundary=([^;]*)(?:;\s*(?:[^\x00-\x20\(\)<>@,;:\\"\/\[\]\?\.=]+)=[^;]+)*$/i', $contentType, $boundaryMatches)) {
+		if (wfXMLRPCBody::canParse() && $isXMLRPC && is_string($rawBody) && !$preventRedaction) {
+			$xml =& $rawBody;
+			if ($contentType == 'application/x-www-form-urlencoded') {
+				$xml = @urldecode($rawBody);
+			}
+			
+			$xmlrpc = new wfXMLRPCBody($xml);
+			if ($xmlrpc->parse() && $xmlrpc->messageType == 'methodCall') {
+				if ($xmlrpc->methodName == 'system.multicall') {
+					$subCalls =& $xmlrpc->params[0]['value'];
+					if (is_array($subCalls)) {
+						foreach ($subCalls as &$call) {
+							$method = $call['value']['methodName']['value'];
+							$params =& $call['value']['params']['value'];
+							
+							if (isset($xmlrpcFieldMap[$method])) {
+								$fieldIndexes = $xmlrpcFieldMap[$method];
+								foreach ($fieldIndexes as $i) {
+									if (isset($params[$i])) {
+										$params[$i]['value'] = '[redacted]';
+									}
+								}
+							}
+						}
+					}
+				}
+				else {
+					if (isset($xmlrpcFieldMap[$xmlrpc->methodName])) {
+						$params =& $xmlrpc->params;
+						$fieldIndexes = $xmlrpcFieldMap[$xmlrpc->methodName];
+						foreach ($fieldIndexes as $i) {
+							if (isset($params[$i])) {
+								$params[$i]['value'] = '[redacted]';
+							}
+						}
+					}
+				}
+				
+				$xml = (string) $xmlrpc;
+				if ($contentType == 'application/x-www-form-urlencoded') {
+					$body = urlencode($xml);
+				}
+			}
+		}
+		else if (is_array($body)) {
+			foreach ($body as $bkey => &$bvalue) {
+				if (!$preventRedaction && $isAuthRequest && ($bkey == 'log' || $bkey == 'pwd' || $bkey == 'user_login' || $bkey == 'user_email' || $bkey == 'pass1' || $bkey == 'pass2' || $bkey == 'rp_key')) {
+					$bvalue = '[redacted]';
+				}
+			}
+			
+			if (preg_match('/^multipart\/form\-data;(?:\s*(?!boundary)(?:[^\x00-\x20\(\)<>@,;:\\"\/\[\]\?\.=]+)=[^;]+;)*\s*boundary=([^;]*)(?:;\s*(?:[^\x00-\x20\(\)<>@,;:\\"\/\[\]\?\.=]+)=[^;]+)*$/i', (string) $contentType, $boundaryMatches)) {
 				$boundary = $boundaryMatches[1];
 				$bodyArray = array();
 				foreach ($body as $key => $value) {
 					$bodyArray = array_merge($bodyArray, $this->reduceBodyParameter($key, $value));
 				}
+				
 				$body = '';
 				foreach ($bodyArray as $param => $value) {
 					if (!empty($highlights['body'])) {
@@ -689,9 +979,6 @@ FORM;
 
 				foreach ($this->getFiles() as $param => $file) {
 					$name = array_key_exists('name', $file) ? $file['name'] : '';
-					if (is_array($name)) {
-						continue; // TODO: implement files as arrays
-					}
 					$mime = array_key_exists('type', $file) ? $file['type'] : '';
 					$value = '';
 					$lenToRead = $maxRequestLen - (wfWAFUtils::strlen($request) + wfWAFUtils::strlen($body) + 1);
@@ -729,7 +1016,7 @@ FORM;
 				}
 			}
 			else { //Assume application/x-www-form-urlencoded and re-encode the body
-				$body = http_build_query($body, null, '&');
+				$body = http_build_query($body, '', '&');
 				if (!empty($highlights['body'])) {
 					foreach ($highlights['body'] as $matches) {
 						if (!empty($matches['param'])) {
@@ -742,8 +1029,14 @@ FORM;
 				}
 			}
 		}
-		if (!is_string($body)) {
-			$body = '';
+		
+		if (!is_string($body) || empty($body)) {
+			if (is_string($rawBody)) {
+				$body = $rawBody;
+			}
+			else {
+				$body = '';
+			}
 		}
 
 		$request .= "\n" . $body;
@@ -861,6 +1154,11 @@ FORM;
 		$this->md5Body = $md5Body;
 	}
 
+	public function setJsonBody($jsonBody) {
+		$this->jsonBody = $jsonBody;
+		$this->jsonParsed = true;
+	}
+
 	/**
 	 * @param mixed $cookies
 	 */
@@ -960,4 +1258,4 @@ FORM;
 		$this->metadata = $metadata;
 	}
 }
-
+}

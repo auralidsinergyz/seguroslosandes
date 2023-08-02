@@ -62,9 +62,11 @@ $length = 0;
 for ($i = 0; $i < $letter_count; $i++) {
 	 $str .= chr(mt_rand(97, 122))." ";
 }
-$_SESSION['rand_code'.$_GET["ps"]] = str_replace(" ", "", $str);
+$_SESSION['rand_code'.sanitize_key($_GET["ps"])] = str_replace(" ", "", $str);
 
-setCookie('rand_code'.$_GET["ps"], md5(str_replace(" ", "", $str)), time()+36000,"/");
+$uidt = uniqid();
+set_transient( "cpeople-captcha-".$uidt , str_replace(" ", "", $str) , 1800 );
+setCookie('rand_code'.sanitize_key($_GET["ps"]), $uidt, time()+36000,"/");
 
 $image = imagecreatetruecolor($imgX, $imgY);
 $backgr_col = imagecolorallocate($image, $bcolor["r"],$bcolor["g"],$bcolor["b"]);
@@ -97,12 +99,15 @@ for ($i=0;$i<$noise;$i++)
 
 switch (@$_GET["font"]) {
     case "font-2.ttf":
+    case "font2":
         $selected_font = "font-2.ttf";
         break;
     case "font-3.ttf":
+    case "font3":
         $selected_font = "font-3.ttf";
         break;
     case "font-4.ttf":
+    case "font4":
         $selected_font = "font-4.ttf";
         break;               
     default:

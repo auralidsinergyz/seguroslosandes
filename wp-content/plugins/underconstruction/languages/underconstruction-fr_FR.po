@@ -34,12 +34,12 @@ msgid "Activate or Deactivate"
 msgstr "Activer ou Désactiver"
 
 #: ../ucOptions.php:178
-msgid "on"
-msgstr "actif"
+msgid "On"
+msgstr "Actif"
 
 #: ../ucOptions.php:181
-msgid "off"
-msgstr "inactif"
+msgid "Off"
+msgstr "Inactif"
 
 #: ../ucOptions.php:188 ../ucOptions.php:196
 msgid "HTTP Status Code"

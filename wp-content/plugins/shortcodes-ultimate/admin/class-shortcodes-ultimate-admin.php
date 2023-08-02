@@ -29,6 +29,15 @@ abstract class Shortcodes_Ultimate_Admin {
 	protected $plugin_version;
 
 	/**
+	 * The prefix of the plugin.
+	 *
+	 * @since    5.0.8
+	 * @access   protected
+	 * @var      string      $plugin_prefix   The prefix of the plugin.
+	 */
+	protected $plugin_prefix;
+
+	/**
 	 * The URL of the plugin folder.
 	 *
 	 * @since    5.0.0
@@ -36,6 +45,15 @@ abstract class Shortcodes_Ultimate_Admin {
 	 * @var      string    $plugin_url    The URL of the plugin folder.
 	 */
 	protected $plugin_url;
+
+	/**
+	 * The path to the plugin folder.
+	 *
+	 * @since    5.1.0
+	 * @access   private
+	 * @var      string      $plugin_path   The path to the plugin folder.
+	 */
+	private $plugin_path;
 
 	/**
 	 * User capability required to access admin pages.
@@ -82,7 +100,6 @@ abstract class Shortcodes_Ultimate_Admin {
 	 */
 	protected $component_tabs;
 
-
 	/**
 	 * Initialize the class and set its properties.
 	 *
@@ -90,12 +107,15 @@ abstract class Shortcodes_Ultimate_Admin {
 	 * @access protected
 	 * @param string  $plugin_file    The path of the main plugin file.
 	 * @param string  $plugin_version The current version of the plugin.
+	 * @param string  $plugin_prefix  The prefix of the plugin.
 	 */
-	protected function __construct( $plugin_file, $plugin_version ) {
+	public function __construct( $plugin_file, $plugin_version, $plugin_prefix ) {
 
 		$this->plugin_file           = $plugin_file;
 		$this->plugin_version        = $plugin_version;
+		$this->plugin_prefix         = $plugin_prefix;
 		$this->plugin_url            = plugin_dir_url( $plugin_file );
+		$this->plugin_path           = plugin_dir_path( $plugin_file );
 		$this->capability            = 'manage_options';
 		$this->component_url         = null;
 		$this->component_hook_suffix = null;
@@ -104,14 +124,19 @@ abstract class Shortcodes_Ultimate_Admin {
 
 	}
 
-
 	/**
-	 * Add menu page
+	 * Register menu pages.
 	 *
 	 * @since   5.0.0
 	 */
-	public function admin_menu() {}
+	public function add_menu_pages() {}
 
+	/**
+	 * Register settings.
+	 *
+	 * @since   5.0.8
+	 */
+	public function add_settings() {}
 
 	/**
 	 * Enqueue JavaScript(s) and Stylesheet(s) for the component.
@@ -119,7 +144,6 @@ abstract class Shortcodes_Ultimate_Admin {
 	 * @since   5.0.0
 	 */
 	public function enqueue_scripts() {}
-
 
 	/**
 	 * Add a top-level menu page.
@@ -146,7 +170,6 @@ abstract class Shortcodes_Ultimate_Admin {
 
 	}
 
-
 	/**
 	 * Add a submenu page.
 	 *
@@ -171,11 +194,10 @@ abstract class Shortcodes_Ultimate_Admin {
 
 	}
 
-
 	/**
 	 * Common callback for all menu pages.
 	 *
-	 * This method retrieves current page slug from $_GET and loads approriate
+	 * This method retrieves current page slug from $_GET and loads appropriate
 	 * template.
 	 *
 	 * @since    5.0.0
@@ -187,65 +209,35 @@ abstract class Shortcodes_Ultimate_Admin {
 		$page = sanitize_title( $_GET['page'], false );
 
 		// Replace plugin slug with template prefix
-		$page = str_replace( 'shortcodes-ultimate-', '', $page );
+		$page = str_replace( $this->plugin_prefix, '', $page );
 
-		// Load "Available shortcodes" page
-		if ( $page === 'shortcodes-ultimate' ) {
-			$page = 'shortcodes';
-		}
-
-		$this->the_template( 'pages/' . $page );
+		$this->the_template( 'admin/partials/pages/' . $page );
 
 	}
-
 
 	/**
-	 * Utility function to get specified template by it's name.
+	 * Display settings section.
 	 *
-	 * @since 5.0.0
-	 * @access protected
-	 * @param string  $name Template name (without extension).
-	 * @param mixed   $data Template data to be passed to the template.
-	 * @return string           Template content.
+	 * @param mixed   $args Settings section data.
+	 * @since  5.0.8
 	 */
-	protected function get_template( $name, $data = null ) {
+	public function the_settings_section( $args ) {
 
-		// Sanitize name
-		$name = preg_replace( '/[^A-Za-z0-9\/_-]/', '', $name );
+		$section = str_replace( $this->plugin_prefix, '', $args['id'] );
 
-		// Trim slashes
-		$name = trim( $name, '/' );
-
-		// The full template path
-		$template = $this->get_plugin_path() . 'admin/partials/' . $name . '.php';
-
-		// Look for a specified file
-		if ( file_exists( $template ) ) {
-
-			ob_start();
-			include $template;
-			$output = ob_get_contents();
-			ob_end_clean();
-
-		}
-
-		return ( isset( $output ) ) ? $output : '';
+		$this->the_template( 'admin/partials/settings/sections/' . $section, $args );
 
 	}
-
 
 	/**
-	 * Utility function to display specified template by it's name.
+	 * Display settings field.
 	 *
-	 * @since 5.0.0
-	 * @access protected
-	 * @param string  $name Template name (without extension).
-	 * @param mixed   $data Template data to be passed to the template.
+	 * @param mixed   $args The field data.
+	 * @since  5.0.8
 	 */
-	protected function the_template( $name, $data = null ) {
-		echo $this->get_template( $name, $data );
+	public function the_settings_field( $args ) {
+		$this->the_template( 'admin/partials/settings/fields/' . $args['type'], $args );
 	}
-
 
 	/**
 	 * Helper function to check component's menu page hook_suffix
@@ -260,7 +252,6 @@ abstract class Shortcodes_Ultimate_Admin {
 		return $screen->id === $this->get_component_hook_suffix();
 
 	}
-
 
 	/**
 	 * Retrieve the title of the current admin screen.
@@ -279,17 +270,15 @@ abstract class Shortcodes_Ultimate_Admin {
 
 	}
 
-
 	/**
 	 * Display the title of the current admin screen.
 	 *
 	 * @since    5.0.0
 	 * @access   protected
 	 */
-	protected function the_page_title() {
+	public function the_page_title() {
 		echo $this->get_page_title();
 	}
-
 
 	/**
 	 * Retrieve tabs collection.
@@ -300,7 +289,6 @@ abstract class Shortcodes_Ultimate_Admin {
 	protected function get_tabs() {
 		return $this->component_tabs;
 	}
-
 
 	/**
 	 * Retrieve the current tab ID
@@ -322,7 +310,6 @@ abstract class Shortcodes_Ultimate_Admin {
 
 	}
 
-
 	/**
 	 * Retrieve the ID of the first tab.
 	 *
@@ -331,12 +318,11 @@ abstract class Shortcodes_Ultimate_Admin {
 	 */
 	protected function get_first_tab() {
 
-		foreach( $this->get_tabs() as $tab_id => $tab_title ) {
+		foreach ( $this->get_tabs() as $tab_id => $tab_title ) {
 			return $tab_id;
 		}
 
 	}
-
 
 	/**
 	 * Retrieve the tab URL by ID
@@ -352,55 +338,6 @@ abstract class Shortcodes_Ultimate_Admin {
 
 	}
 
-
-	/**
-	 * Retrieve the path of the main plugin file.
-	 *
-	 * @since    5.0.0
-	 * @access   protected
-	 * @return   string   The path of the main plugin file.
-	 */
-	protected function get_plugin_file() {
-		return $this->plugin_file;
-	}
-
-
-	/**
-	 * Retrieve the path of the plugin.
-	 *
-	 * @since    5.0.0
-	 * @access   protected
-	 * @return   string   The path of the plugin.
-	 */
-	protected function get_plugin_path() {
-		return plugin_dir_path( $this->plugin_file );
-	}
-
-
-	/**
-	 * Retrieve the current version of the plugin.
-	 *
-	 * @since    5.0.0
-	 * @access   protected
-	 * @return   string   The current version of the plugin.
-	 */
-	protected function get_plugin_version() {
-		return $this->plugin_version;
-	}
-
-
-	/**
-	 * Retrieve the URL of the plugin folder.
-	 *
-	 * @since    5.0.0
-	 * @access   protected
-	 * @return   string   The URL of the plugin folder.
-	 */
-	protected function get_plugin_url() {
-		return $this->plugin_url;
-	}
-
-
 	/**
 	 * Retrieve user capability required to access admin pages.
 	 *
@@ -411,7 +348,6 @@ abstract class Shortcodes_Ultimate_Admin {
 	protected function get_capability() {
 		return apply_filters( 'su/admin/capability', $this->capability );
 	}
-
 
 	/**
 	 * Retrieve the plugin menu pages.
@@ -424,7 +360,6 @@ abstract class Shortcodes_Ultimate_Admin {
 		return self::$plugin_menu_pages;
 	}
 
-
 	/**
 	 * Retrieve the hook_suffix of the component menu page.
 	 *
@@ -435,7 +370,6 @@ abstract class Shortcodes_Ultimate_Admin {
 		return $this->component_hook_suffix;
 	}
 
-
 	/**
 	 * Retrieve the URL of the component menu page.
 	 *
@@ -443,8 +377,86 @@ abstract class Shortcodes_Ultimate_Admin {
 	 * @access   protected
 	 * @return   array   The URL of the component menu page.
 	 */
-	protected function get_component_url() {
+	public function get_component_url() {
 		return $this->component_url;
+	}
+
+	/**
+	 * Callback function to sanitize checkbox value.
+	 *
+	 * @since  5.0.0
+	 * @param mixed   $value String 'on' or null.
+	 * @return string        Sanitized checkbox value ('on' or empty string '').
+	 */
+	public function sanitize_checkbox( $value ) {
+		return ! empty( $value ) && 'on' === $value ? 'on' : '';
+	}
+
+	/**
+	 * Callback function to sanitize checkbox-group value.
+	 *
+	 * @since  5.1.0
+	 * @param mixed   $value Array with selected checkboxes or null.
+	 * @return string        Array with selected checkbox IDs, each sanitized.
+	 */
+	public function sanitize_checkbox_group( $value ) {
+		return array_map( 'sanitize_text_field', array_keys( (array) $value ) );
+	}
+
+	/**
+	 * Callback function to sanitize prefix value.
+	 *
+	 * @since  5.0.1
+	 * @param string  $prefix Prefix value.
+	 * @return string          Sanitized string.
+	 * @see  https://developer.wordpress.org/reference/functions/add_shortcode/ Source of the RegExp.
+	 */
+	public function sanitize_prefix( $prefix ) {
+		return preg_replace( '@[<>&/\[\]\x00-\x20="\']@', '', $prefix );
+	}
+
+	/**
+	 * Utility function to get specified template by it's name.
+	 *
+	 * @since 5.0.0
+	 * @param string  $name Template name without extension.
+	 * @param mixed   $data Data to be available from within template.
+	 * @return string       Template content. Returns empty string if template name is invalid or template file wasn't found.
+	 */
+	public function get_template( $name = '', $data = array() ) {
+
+		// Validate template name
+		if ( preg_match( "/^(?!-)[a-z0-9-_]+(?<!-)(\/(?!-)[a-z0-9-_]+(?<!-))*$/", $name ) !== 1 ) {
+			return '';
+		}
+
+		// The full path to template file
+		$file = $this->plugin_path . $name . '.php';
+
+		// Look for a specified file
+		if ( file_exists( $file ) ) {
+
+			ob_start();
+			include $file;
+			$template = ob_get_contents();
+			ob_end_clean();
+
+		}
+
+		return isset( $template ) ? $template : '';
+
+	}
+
+
+	/**
+	 * Utility function to display specified template by it's name.
+	 *
+	 * @since 5.0.0
+	 * @param string  $name Template name (without extension).
+	 * @param mixed   $data Template data to be passed to the template.
+	 */
+	public function the_template( $name, $data = null ) {
+		echo $this->get_template( $name, $data );
 	}
 
 }

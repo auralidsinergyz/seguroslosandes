@@ -27,7 +27,7 @@ function displayComingSoonPage($title, $headerText, $bodyText)
     <head>
         <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
         <title>
-            <?php echo $title; ?>
+            <?php echo esc_html($title); ?>
         </title>
         <style type="text/css">
             
@@ -66,11 +66,11 @@ function displayComingSoonPage($title, $headerText, $bodyText)
     </head>
     <body>
         <span class="headerText">
-            <?php echo $headerText; ?>
+            <?php echo esc_html($headerText); ?>
         </span>
         <br/>
         <span class="bodyText">
-            <?php echo $bodyText; ?>
+            <?php echo esc_html($bodyText); ?>
         </span>
     </body>
 </html>

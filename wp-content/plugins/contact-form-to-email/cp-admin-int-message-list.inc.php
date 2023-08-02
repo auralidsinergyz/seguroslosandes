@@ -7,12 +7,41 @@ if ( !is_admin() )
 }
 
 $this->item = intval($_GET["cal"]);
+$records_per_page = 50;   
 
 global $wpdb;
 
+if ($this->item < 0) $this->setId(0);
 $message = "";
 
-if (isset($_GET['ld']) && $_GET['ld'] != '')
+if (isset($_GET['delmark']) && $_GET['delmark'] != '')
+{
+    $verify_nonce = wp_verify_nonce( $_GET['rsave'], 'cfte_message_actions_plist');
+    if (!$verify_nonce)
+    {
+        echo 'Error: Form cannot be authenticated (nonce failed). Please contact our <a href="form2email.dwbooster.com/contact-us">support service</a> for verification and solution. Thank you.';
+        return;
+    }     
+    for ($i=0; $i<=$records_per_page; $i++)
+    if (isset($_GET['c'.$i]) && $_GET['c'.$i] != '')   
+        $wpdb->query('DELETE FROM `'.$wpdb->prefix.$this->table_messages.'` WHERE id='.intval($_GET['c'.$i]));       
+    $message = "Marked items deleted";
+}
+else if (isset($_GET['del']) && $_GET['del'] == 'all')
+{    
+    $verify_nonce = wp_verify_nonce( $_GET['rsave'], 'cfte_message_actions_plist');
+    if (!$verify_nonce)
+    {
+        echo 'Error: Form cannot be authenticated (nonce failed). Please contact our <a href="form2email.dwbooster.com/contact-us">support service</a> for verification and solution. Thank you.';
+        return;
+    }     
+    if ($this->item  == '' || $this->item  == 0)
+        $wpdb->query('DELETE FROM `'.$wpdb->prefix.$this->table_messages.'`');           
+    else
+        $wpdb->query('DELETE FROM `'.$wpdb->prefix.$this->table_messages.'` WHERE formid='.intval($this->item));           
+    $message = "All items deleted";
+} 
+else if (isset($_GET['ld']) && $_GET['ld'] != '')
 {
     $verify_nonce = wp_verify_nonce( $_GET['rsave'], 'cfte_message_actions_plist');
     if (!$verify_nonce)
@@ -68,71 +97,99 @@ else if (isset($_GET['import']) && $_GET['import'] == '1')
 if ($this->item != 0)
     $myform = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM '.$wpdb->prefix.$this->table_items .' WHERE id=%d', intval($this->item) ) );
 
-$current_page = intval($_GET["p"]);
+$current_page = intval( (isset($_GET["p"]) ? intval($_GET["p"]) : 0) );
 if (!$current_page) $current_page = 1;
-$records_per_page = 50;                                                                                  
+                                                                               
 
 $cond = '';
-if ($_GET["search"] != '') $cond .= " AND (data like '%".esc_sql($_GET["search"])."%' OR posted_data LIKE '%".esc_sql($_GET["search"])."%')";
-if ($_GET["dfrom"] != '') $cond .= " AND (`time` >= '".esc_sql($_GET["dfrom"])."')";
-if ($_GET["dto"] != '') $cond .= " AND (`time` <= '".esc_sql($_GET["dto"])." 23:59:59')";
+if (!empty($_GET["search"])) $cond .= " AND (data like '%".esc_sql($_GET["search"])."%' OR posted_data LIKE '%".esc_sql($_GET["search"])."%')";
+if (!empty($_GET["dfrom"])) $cond .= " AND (`time` >= '".esc_sql($_GET["dfrom"].(@$_GET["tfrom"]?' '.$_GET["tfrom"]:''))."')";
+if (!empty($_GET["dto"])) $cond .= " AND (`time` <= '".esc_sql($_GET["dto"].(@$_GET["tto"]?' '.$_GET["tto"]:' 23:59:59'))."')";
 if ($this->item != 0) $cond .= " AND formid=".intval($this->item);
 
 $events = $wpdb->get_results( "SELECT * FROM ".$wpdb->prefix.$this->table_messages." WHERE 1=1 ".$cond." ORDER BY `time` DESC" );
 $total_pages = ceil(count($events) / $records_per_page);
 
-if ($message) echo "<div id='setting-error-settings_updated' class='updated settings-error'><p><strong>".$message."</strong></p></div>";
+if ($message) echo "<div id='setting-error-settings_updated' class='updated settings-error'><p><strong>".esc_html($message)."</strong></p></div>";
 
 $nonce = wp_create_nonce( 'cfte_message_actions_plist' );
 
 ?>
 <script type="text/javascript">
+ function cp_editItem(id)
+ {
+    document.location = 'admin.php?page=<?php echo esc_js($this->menu_parameter); ?>&cal=<?php echo intval($_GET["cal"]); ?>&edititem='+id+'&r='+Math.random( );     
+ } 
  function cp_deleteMessageItem(id)
  {
     if (confirm('Are you sure that you want to delete this item?'))
     {        
-        document.location = 'admin.php?page=<?php echo $this->menu_parameter; ?>&rsave=<?php echo $nonce; ?>&cal=<?php echo $this->item; ?>&list=1&ld='+id+'&r='+Math.random();
+        document.location = 'admin.php?page=<?php echo esc_js($this->menu_parameter); ?>&rsave=<?php echo $nonce; ?>&cal=<?php echo $this->item; ?>&list=1&ld='+id+'&r='+Math.random();
     }
  }
+ function cp_deletemarked()
+ {
+    if (confirm('Are you sure that you want to delete the marked items?')) 
+        document.dex_table_form.submit();
+ }  
+ function cp_deleteall()
+ {
+    if (confirm('Are you sure that you want to delete ALL messages for this form?'))
+    {        
+        document.location = 'admin.php?page=<?php echo esc_js($this->menu_parameter); ?>&cal=<?php echo intval($_GET["cal"]); ?>&rsave=<?php echo $nonce; ?>&list=1&del=all&r='+Math.random();
+    }    
+ }
+ function cp_markall()
+ {
+     var ischecked = document.getElementById("cpcontrolck").checked;
+     <?php for ($i=($current_page-1)*$records_per_page; $i<$current_page*$records_per_page; $i++) if (isset($events[$i])) { ?>
+     document.forms.dex_table_form.c<?php echo $i-($current_page-1)*$records_per_page; ?>.checked = ischecked;
+     <?php } ?>
+ }  
 </script>
 <div class="wrap">
-<h1><?php echo $this->plugin_name; ?> - Message List</h1>
+<h1><?php if ($this->item != 0) echo esc_html($myform[0]->form_name); else echo 'All forms'; ?> - <?php echo esc_html($this->plugin_name); ?> Message List</h1>
 
-<input type="button" name="backbtn" value="Back to items list..." onclick="document.location='admin.php?page=<?php echo $this->menu_parameter; ?>';">
-
-
-<div id="normal-sortables" class="meta-box-sortables">
- <hr />
- <h3>This message list is from: <?php if ($this->item != 0) echo strip_tags($myform[0]->form_name); else echo 'All forms'; ?></h3>
+<div class="ahb-buttons-container">
+	<a href="<?php print esc_attr(admin_url('admin.php?page='.esc_attr($this->menu_parameter)));?>" class="ahb-return-link">&larr;Return to the forms list</a>
+	<div class="clear"></div>
 </div>
 
-
+<div class="ahb-section-container">
+	<div class="ahb-section">
 <form action="admin.php" method="get">
- <input type="hidden" name="page" value="<?php echo $this->menu_parameter; ?>" />
- <input type="hidden" name="cal" value="<?php echo $this->item; ?>" />
+ <input type="hidden" name="page" value="<?php echo esc_attr($this->menu_parameter); ?>" />
+ <input type="hidden" name="cal" value="<?php echo esc_attr($this->item); ?>" />
  <input type="hidden" name="list" value="1" />
- <nobr>Search for: <input type="text" name="search" value="<?php echo esc_attr($_GET["search"]); ?>" /> &nbsp; &nbsp; &nbsp;</nobr> 
- <nobr>From: <input type="text" id="dfrom" name="dfrom" value="<?php echo esc_attr($_GET["dfrom"]); ?>" /> &nbsp; &nbsp; &nbsp; </nobr>
- <nobr>To: <input type="text" id="dto" name="dto" value="<?php echo esc_attr($_GET["dto"]); ?>" /> &nbsp; &nbsp; &nbsp; </nobr>
- <nobr>Item: <select id="cal" name="cal">
-          <option value="0">[All Items]</option>
+ <nobr>Search for: <input autocomplete="off" type="text" name="search" value="<?php echo esc_attr( (!empty($_GET["search"]) ? $_GET["search"] : '') ); ?>" /> &nbsp; &nbsp; &nbsp;</nobr> 
+ <nobr>From: <input autocomplete="off" type="text" id="dfrom" name="dfrom" style="width:100px;" value="<?php echo esc_attr(  (!empty($_GET["dfrom"]) ? $_GET["dfrom"] : '' ) ); ?>" /><?php cfte_get_time_field('tfrom');?>
+ &nbsp; &nbsp; &nbsp; </nobr>
+ <nobr>To: <input type="text" id="dto" name="dto" value="<?php echo esc_attr( (!empty($_GET["dto"]) ? $_GET["dto"] : '') ); ?>" /><?php esc_html(cfte_get_time_field('tto')); ?>
+ &nbsp; &nbsp; &nbsp; </nobr>
+ <nobr>Item: <select id="cal" name="cal" style="vertical-align:baseline;height:auto;"> 
+          <option value="-1">[All Items]</option>
    <?php
     $myrows = $wpdb->get_results( "SELECT * FROM ".$wpdb->prefix.$this->table_items );                                                                     
     foreach ($myrows as $item)  
-         echo '<option value="'.$item->id.'"'.(intval($item->id)==intval($this->item)?" selected":"").'>'.strip_tags($item->form_name).'</option>'; 
+         echo '<option value="'.$item->id.'"'.(intval($item->id)==intval($this->item)?" selected":"").'>'.esc_html($item->form_name).'</option>'; 
    ?>
     </select></nobr>
- <nobr><span class="submit"><input type="submit" name="ds" value="Filter" /></span> &nbsp; &nbsp; &nbsp; 
- <span class="submit"><input type="submit" name="<?php echo $this->prefix; ?>_csv" value="Export to CSV" /></span></nobr>
+ <nobr> 
+    <input class="button" type="submit" name="<?php echo $this->prefix; ?>_csv" value="Export to CSV"  style="margin-left:10px;float:right;"/>
+    <input class="button-primary button" type="submit" name="ds" value="Filter"  style="float:right;" />
+ </nobr>
 </form>
+ <div class="clearer"></div>
+	</div>
+</div>
 
 <br />
                              
 <?php
 
 
-echo paginate_links(  array(
-    'base'         => 'admin.php?page='.$this->menu_parameter.'&cal='.$this->item.'&list=1%_%&dfrom='.urlencode($_GET["dfrom"]).'&dto='.urlencode($_GET["dto"]).'&search='.urlencode($_GET["search"]),
+echo paginate_links(  array(    
+    'base'         => 'admin.php?page='.esc_attr($this->menu_parameter).'&cal='.intval($this->item).'&list=1%_%&dfrom='.urlencode((!empty($_GET["dfrom"]) ? $_GET["dfrom"] : '')).'&dto='.urlencode((!empty($_GET["dto"]) ? $_GET["dto"] : '')).'&search='.urlencode((!empty($_GET["search"]) ? $_GET["search"] : '')),
     'format'       => '&p=%#%',
     'total'        => $total_pages,
     'current'      => $current_page,
@@ -149,9 +206,17 @@ echo paginate_links(  array(
 ?>
 
 <div id="dex_printable_contents">
-<table class="wp-list-table widefat fixed pages" cellspacing="0" width="100%">
-	<thead>
+<form name="dex_table_form" id="dex_table_form" action="admin.php" method="get">
+ <input type="hidden" name="page" value="<?php echo esc_attr($this->menu_parameter); ?>" />
+ <input type="hidden" name="cal" value="<?php echo intval($_GET["cal"]); ?>" />
+ <input type="hidden" name="list" value="1" />
+ <input type="hidden" name="delmark" value="1" />
+ <input type="hidden" name="rsave" value="<?php echo esc_attr($nonce); ?>" />
+ 
+<table class=" widefat fixed pages"  cellspacing="0" width="100%">
+	<thead >
 	<tr>
+	  <th width="30" class="cpnopr"><input type="checkbox" name="cpcontrolck" id="cpcontrolck" value="" onclick="cp_markall();"></th>
 	  <th style="padding-left:7px;font-weight:bold;width:120px;">Date</th>
 	  <th style="padding-left:7px;font-weight:bold;">Email</th>
 	  <th style="padding-left:7px;font-weight:bold;">Message</th>
@@ -161,9 +226,10 @@ echo paginate_links(  array(
 	<tbody id="the-list">
 	 <?php for ($i=($current_page-1)*$records_per_page; $i<$current_page*$records_per_page; $i++) if (isset($events[$i])) { ?>
 	  <tr class='<?php if (!($i%2)) { ?>alternate <?php } ?>author-self status-draft format-default iedit' valign="top">
+		<td width="1%"  class="cpnopr"><input type="checkbox" name="c<?php echo $i-($current_page-1)*$records_per_page; ?>" value="<?php echo $events[$i]->id; ?>" /></td>      
 		<td><?php echo substr($events[$i]->time,0,16); ?></td>
-		<td><?php echo htmlentities($events[$i]->notifyto); ?></td>
-		<td><?php  
+		<td style="overflow:hidden"><?php echo esc_html($events[$i]->notifyto); ?></td>
+		<td  style="overflow:hidden"><?php  
 		        $data = $events[$i]->data;		        
 		        $posted_data = unserialize($events[$i]->posted_data);		        
 		        foreach ($posted_data as $item => $value)
@@ -174,15 +240,24 @@ echo paginate_links(  array(
 		        echo str_replace("\n","<br />",str_replace('<','&lt;',$data)); 
 		    ?></td>
 		<td class="cpnopr">
-		  <input type="button" name="caldelete_<?php echo $events[$i]->id; ?>" value="Delete" onclick="cp_deleteMessageItem(<?php echo $events[$i]->id; ?>);" />                             
+          <input class="button" type="button" name="caltoggle_<?php echo $events[$i]->id; ?>" value="Edit" onclick="cp_editItem(<?php echo $events[$i]->id; ?>);" />
+		  <input class="button" type="button" name="caldelete_<?php echo $events[$i]->id; ?>" value="Delete" onclick="cp_deleteMessageItem(<?php echo $events[$i]->id; ?>);" />                             
 		</td>
       </tr>
      <?php } ?>
 	</tbody>
 </table>
+</form>
 </div>
-
-<p class="submit"><input type="button" name="pbutton" value="Print" onclick="do_dexapp_print();" /></p>
+<input class="button-primary button" type="button" name="pbutton" value="Print" onclick="do_dexapp_print();" />
+<div class="ahb-buttons-container">
+	<a href="<?php print esc_attr(admin_url('admin.php?page='.$this->menu_parameter));?>" class="ahb-return-link">&larr;Return to the forms list</a>
+	<div class="clear"></div>
+</div>
+<div style="clear:both"></div>
+<p class="submit" style="float:left;"><input class="button" type="button" name="pbutton" value="Delete Marked Messages" onclick="cp_deletemarked();" /> &nbsp; &nbsp; &nbsp; </p>
+<p class="submit" style="float:left;"><input class="button" type="button" name="pbutton" value="Delete All Messages" onclick="cp_deleteall();" /></p>
+<div style="clear:both"></div>
 
 </div>
 
@@ -194,8 +269,9 @@ echo paginate_links(  array(
   <div class="inside">
   
    <form name="CPImportForm" action="admin.php?page=cp_contactformtoemail&rsave=<?php echo $nonce; ?>&cal=<?php echo $this->item; ?>&list=1&import=1" method="post" enctype="multipart/form-data">
-   <input type="file" name="importfile" />
-   <input type="submit" name="pbuttonimport" value="Import"/>
+   <input style="float:left"  type="file" name="importfile" />
+   <input class="button" type="submit" name="pbuttonimport" value="Import"/>
+   <div style="clear:both"></div>
    <p>Instructions: Comma separated CSV file. One record per line, one field per column. <strong>Don't use a header row with the field names</strong>.</p>
    <p>The first 3 columns into the CSV file are the <strong>time, IP address and email address</strong>, if you don't have this information then leave the first three columns empty. 
       After those initial columns the fields (columns) must appear in the same order than in the form.</p>
@@ -206,6 +282,7 @@ echo paginate_links(  array(
    </pre>
    </form>
   </div>
+</div>
 </div>
 <?php } ?>
 
@@ -229,9 +306,20 @@ echo paginate_links(  array(
  });
  
 </script>
+<?php
 
-
-
+function cfte_get_time_field($field)
+{
+  echo '<select style="vertical-align:baseline;height:auto;" name="'.esc_attr($field).'">  <option value=""></option>';
+  for ($i=0; $i<23; $i++)
+  {
+      echo '<option'.(!empty($_GET[$field]) && $_GET[$field]==($i<10?'0':'').$i.":00"?' selected':'').'>'.($i<10?'0':'').$i.":00</option>";
+      echo '<option'.(!empty($_GET[$field]) && $_GET[$field]==($i<10?'0':'').$i.":15"?' selected':'').'>'.($i<10?'0':'').$i.":15</option>";
+      echo '<option'.(!empty($_GET[$field]) && $_GET[$field]==($i<10?'0':'').$i.":30"?' selected':'').'>'.($i<10?'0':'').$i.":30</option>";
+      echo '<option'.(!empty($_GET[$field]) && $_GET[$field]==($i<10?'0':'').$i.":45"?' selected':'').'>'.($i<10?'0':'').$i.":45</option>";
+  }
+  echo '</select>';
+}
 
 
 

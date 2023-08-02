@@ -15,7 +15,7 @@ class CP_CFTEMAIL_BaseClass {
     		if ($networkwide) {
     	                $old_blog = $wpdb->blogid;
     			// Get all blog ids
-    			$blogids = $wpdb->get_col($wpdb->prepare("SELECT blog_id FROM $wpdb->blogs"));
+    			$blogids = $wpdb->get_col( "SELECT blog_id FROM $wpdb->blogs" );
     			foreach ($blogids as $blog_id) {
     				switch_to_blog($blog_id);
     				$this->_install();
@@ -37,9 +37,43 @@ class CP_CFTEMAIL_BaseClass {
             return '';
     }
     
+    
     function is_administrator()
     {
         return current_user_can('manage_options');
+    }
+    
+    
+    function clean_sanitize ( $str )
+	{
+        if (is_array($str))
+        {
+            for ($iv=0; $iv<count($str); $iv++)
+                $str[$iv] = $this->clean_sanitize($str[$iv]);
+            return $str;
+        }
+        else
+        {
+            if ( is_object( $str ) ) {
+                return '';
+            }
+            $str = (string) $str; 
+            $filtered = wp_check_invalid_utf8( $str );    
+            while ( preg_match( '/%[a-f0-9]{2}/i', $filtered, $match ) ) 
+                $filtered = str_replace( $match[0], '', $filtered );
+            return trim($filtered);
+        }		
+	} 
+
+    
+    function get_site_url_slash($admin = false)
+    {
+        $url = $this->get_site_url($admin);
+        if (strpos($url,'?') !== false)
+            $url .= '&';
+        else 
+            $url .= '?';
+        return $url;
     }
     
     function get_site_url($admin = false)
@@ -51,7 +85,7 @@ class CP_CFTEMAIL_BaseClass {
             $url = get_home_url( $blog );	
         
         $url = parse_url($url);
-        return rtrim(@$url["path"],"/");
+        return isset($url["path"]) ? rtrim($url["path"],"/") : "/";
     }
     
     
@@ -64,7 +98,7 @@ class CP_CFTEMAIL_BaseClass {
             $url = get_home_url( $blog );	
         
         $url = parse_url($url);
-        $url = rtrim($url["path"],"/");
+        $url = isset($url["path"]) ? rtrim($url["path"],"/") : "/";
         $pos = strpos($url, "://");
         if ($pos === false)
             $url = 'http://'.$_SERVER["HTTP_HOST"].$url;
@@ -103,15 +137,20 @@ class CP_CFTEMAIL_BaseClass {
     {   
         global $wpdb;        
         if ($this->option_buffered_id == $this->item)
-            $value = @$this->option_buffered_item->$field;
+            $value = (property_exists($this->option_buffered_item, $field) && !empty(@$this->option_buffered_item->$field) ? @$this->option_buffered_item->$field : '');
         else
         {              
            $myrows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM ".$wpdb->prefix.$this->table_items." WHERE id=%d", $this->item ) );
-           $value = @$myrows[0]->$field;           
-           $this->option_buffered_item = $myrows[0];
-           $this->option_buffered_id  = $this->item;
+           if (count($myrows) && isset($myrows[0]->$field)) 
+           {
+               $value = @$myrows[0]->$field;           
+               $this->option_buffered_item = $myrows[0];
+               $this->option_buffered_id  = $this->item;
+           }
+           else  
+               $value = $default_value;
         }
-        if ($value == '' && $this->option_buffered_item->form_structure == '')
+        if ($value == '' && is_object($this->option_buffered_item) && $this->option_buffered_item->form_structure == '')
             $value = $default_value;
         return $value;
     }
