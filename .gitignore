@@ -1,3 +1,4 @@
 # nano .gitignore
 # Ignorar archivos de bdd
+
 wp-config.php
