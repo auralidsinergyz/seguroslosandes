@@ -6617,7 +6617,7 @@ button.close {
 	background-size: 100% auto;
 }
 .border-top{
-	background-image: url("http://www.seguroslosandes.com/wp-content/themes/SLA/inc/images/borde-top.png");
+	/* background-image: url("http://www.seguroslosandes.com/wp-content/themes/SLA/inc/images/borde-top.png"); */
 	width:100%;
 	height:5px;
 }
@@ -6875,7 +6875,7 @@ button.close {
 }
 @media (min-width: 992px) and (max-width: 1199px) {
 	.fondo-desktop{
-		background-image:url("http://www.seguroslosandes.com/wp-content/themes/SLA/inc/images/fondo-header-SLA_min_992.png");
+		/* background-image:url("http://www.seguroslosandes.com/wp-content/themes/SLA/inc/images/fondo-header-SLA_min_992.png"); */
 	}
 	.info-home-title span{
 		font-size:65px;
