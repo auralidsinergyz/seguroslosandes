@@ -1605,7 +1605,7 @@ pre code {
     width: 100%;
   }
   .fondo-desktop{
-		background-image:url("http://www.seguroslosandes.com/wp-content/themes/SLA/inc/images/fondo-header-SLA.png");
+		/* background-image:url("http://www.seguroslosandes.com/wp-content/themes/SLA/inc/images/fondo-header-SLA.png"); */
 		/*height: 115px;*/
 	}
 }
