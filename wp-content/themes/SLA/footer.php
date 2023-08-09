@@ -40,6 +40,7 @@
 						</ul>
 					</div>
 					<div class="col-xs-12 col-sm-12 col-md-4 col-lg-4">
+						<div class="ssl-box-inf">
 						<div class="img-footer">
 							<img src="http://www.seguroslosandes.com/wp-content/themes/SLA/inc/images/reconocimiento-ORACLE-SLA.png" title="Reconocimiento ORACLE" alt="Reconocimiento ORACLE" width="100" height="78"/>
 						</div>
@@ -48,11 +49,14 @@
 							<a href="http://www.verisign.es/products-services/security-services/ssl/ssl-information-center/" target="_blank"  style="color:#000000; text-decoration:none; font:bold 7px verdana,sans-serif; letter-spacing:.5px; text-align:center; margin:0px; padding:0px;">Acerca de los certificados SSL<a/>
 							
 						</div>
+						</div>
 						<div class="contacto-footer">
 							Dirección: Av. Las Pilas. Urb. Santa Inés, Edificio Seguros Los Andes.</br>
 							San Cristóbal, Edo. Táchira.</br>
-							<a href="https://api.whatsapp.com/send/?phone=%2B584248123221&text&type=phone_number&app_absent=0">WhatsApp: (424) 8123221.</a></br>
-<!-- 							Fax: (0276) 3402612 / 2621.</br> -->
+							Telf.: (0276) 3402611.</br>
+							Fax: (0276) 3402612 / 2621.</br>
+							<a target="_blank" href="https://api.whatsapp.com/send/?phone=%2B584248123221&text&type=phone_number&app_absent=0">WhatsApp: (424) 8123221.</a></br>
+<!-- 							
 						</div>
 					</div>
 				</div>

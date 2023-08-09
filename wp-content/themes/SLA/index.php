@@ -92,7 +92,7 @@ get_header(); ?>
 		<div class="row">
 			<div class="col-xs-12 col-sm-6 col-md-3 col-lg-3">
 				<div class="info-home" style="text-align:center; background-color:#EF8339;">
-					<a class="info-home-title" title="Cont&aacute;ctenos" href="http://www.seguroslosandes.com/?page_id=241">
+					<a class="info-home-title" title="Cont&aacute;ctenos" href="https://seguroslosandes.myservy.com/polizas/contactanos/">
 						<span class="fa fa-phone">
 						<h3 class="large">Cont&aacute;ctenos</h3>
 						</a>
@@ -102,7 +102,7 @@ get_header(); ?>
 			</div>
 			<div class="col-xs-12 col-sm-6 col-md-3 col-lg-3">
 				<div class="info-home" style="text-align:center; background-color:#184C74;">
-					<a class="info-home-title" title="Nuestras Oficinas" href="http://www.seguroslosandes.com/?page_id=334">
+					<a class="info-home-title" title="Nuestras Oficinas" href="https://seguroslosandes.myservy.com/polizas/oficinas/">
 						<span class="fa fa-building">
 						<h3 class="large" >Nuestras Oficinas</h3>
 						</a>
