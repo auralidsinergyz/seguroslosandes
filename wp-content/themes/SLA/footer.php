@@ -51,8 +51,8 @@
 						<div class="contacto-footer">
 							Dirección: Av. Las Pilas. Urb. Santa Inés, Edificio Seguros Los Andes.</br>
 							San Cristóbal, Edo. Táchira.</br>
-							Telf.: (0276) 3402611.</br>
-							Fax: (0276) 3402612 / 2621.</br>
+							<a href="https://api.whatsapp.com/send/?phone=%2B584248123221&text&type=phone_number&app_absent=0">WhatsApp: (424) 8123221.</a></br>
+<!-- 							Fax: (0276) 3402612 / 2621.</br> -->
 						</div>
 					</div>
 				</div>
